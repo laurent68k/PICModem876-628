@@ -1,0 +1,2412 @@
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE  1
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00001 ;**********************************************************************
+                      00002 ;       Filename:           PICModem876-628.asm
+                      00003 ;       Date:           01 Aout 2014
+                      00004 ;       Update:                 3 Fevrier 2015
+                      00005 ;
+                      00006 ;       Author:                 Favard Laurent
+                      00007 ;
+                      00008 ;       Simulation d'un modem
+                      00009 ;       LEDs clignotante à rythme différent (sur Intr et main loop)
+                      00010 ;
+                      00011 ;       >>> Inclu du code Application Note Microchip AN3921 pour supporter le RTC DS1307
+                      00012 ;       >>> Correction du buffer de réception qui n'était pas nettoyé
+                      00013 ;       >>> Source code compilable pour 16F876 ou 16F628: "Configure->Select Device..."
+                      00014 ;       >>> Ajout de \r\n avant OK et ERROR
+                      00015 ;       >>> Nouvelle routine de lecture BCD dédiée décimale sur deux digits max.
+                      00016 ;
+                      00017 ;       Support AT commands:
+                      00018 ;       AT+CMGS:
+                      00019 ;               Do a CR
+                      00020 ;               Send a >
+                      00021 ;               Wait for a text
+                      00022 ;               Wait for CTRL-Z (0x26)
+                      00023 ;               Send "+CMGS: 198"
+                      00024 ;               Send "OK"
+                      00025 ;
+                      00026 ;       AT+CMGS:
+                      00027 ;               Send back: +CMGL: 1,"REC READ","+33612345678",,"09/06/14,00:30:29+32"
+                      00028 ;
+                      00029 ;
+                      00030 ;       ATE0 and ATE1
+                      00031 ;               If Echo Off, les caractères recus d'une commande ne font pas echo
+                      00032 ;               If Echo ON, les caractères recus d'une commande font echo
+                      00033 ;
+                      00034 ;       AT&V
+                      00035 ;               Display the welcome command
+                      00036 ;
+                      00037 ;       ATRD (laurent AT command !)
+                      00038 ;               Read Clock on DS1307 and display the datetime on the screen
+                      00039 ;
+                      00040 ;       ATWR (laurent AT command !)
+                      00041 ;               Write Clock to DS1307
+                      00042 ;
+                      00043 ;       All other AT command wich start with AT return OK
+                      00044 ;       All others unknown command return ERROR
+                      00045 ;
+                      00046 ;**********************************************************************
+                      00047 ;       HARDWARE DESCRIPTION:
+                      00048 ;
+                      00049 ;       Processor:              16F876 or 16F628
+                      00050 ;       Crystal:                4MHz
+                      00051 ;       WDT:                    Disable
+                      00052 ;       RS-232C:                Used (By Basic Breakout FTDI)
+                      00053 ;       I2C Bus:                Done at the hand with I/O pins
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE  2
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00054 ;       Revision soft:  0.0
+                      00055 ;       Board:                  Prototype Board
+                      00056 ;
+                      00057 ;**********************************************************************
+                      00058 ;                                                                     
+                      00059 ;       Notes:                                                           
+                      00060 ;       Crystal 4 Mhz, Bps rate for RS232 = 9600
+                      00061 ;
+                      00062 ;       (Pins are 0 to 7)
+                      00063 ;
+                      00064 ;       LED green       =       Pin 6 Port B    (Enable state at 0V)
+                      00065 ;       LED yellow      =       Pin 7 Port B    (Enable state at 0V)
+                      00066 ;
+                      00067 ;       SCL     =       Pin 1 PORTA                             bus clock line
+                      00068 ;       SDA     =       Pin 4 PORTA                             bus data line
+                      00069 ;**********************************************************************
+                      00070 
+                      00071 ;       Include the correct header regarding the CPU
+                      00072 #ifdef  __16F876
+Message[301]: MESSAGE: (Processor: Include selected is 16F876.)
+                      00073         MESSG "Processor: Include selected is 16F876."
+                      00074         list      p=16f876                                              ; list directive to define proce
+                            ssor
+                      00075         #include <p16f876.inc>                                  ; processor specific variable definition
+                            s
+                      00001         LIST
+                      00002 
+                      00003 ;==========================================================================
+                      00004 ;  MPASM PIC16F876 processor include
+                      00005 ; 
+                      00006 ;  (c) Copyright 1999-2013 Microchip Technology, All rights reserved
+                      00007 ;==========================================================================
+                      00008 
+                      00498         LIST
+                      00076 #endif
+                      00077 
+                      00078 #ifdef  __16F628
+                      00079         MESSG "Processor: Include selected is 16F628."
+                      00080         list      p=16F628                                              ; list directive to define proce
+                            ssor
+                      00081         #include <p16f628.inc>                                  ; processor specific variable definition
+                            s
+                      00082 #endif
+                      00083         
+                      00084 
+                      00085         #include <laurent.inc>                                  ; my include (Macros)
+                      00001 ;**********************************************************************
+                      00002 ;       Filename:           Laurent.inc
+                      00003 ;       Date:           18 Juillet 2001
+                      00004 ;       File Version:   11 September 2014
+                      00005 ;
+                      00006 ;       Author:                 Favard Laurent
+                      00007 ;
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE  3
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00008 ;**********************************************************************
+                      00009 
+  00000019            00010 BAUD_9600                       EQU             0x19                            ;Constant for baud gener
+                            ator 9600 baud at 4 Mhz
+  0000001F            00011 BAUD_7812_5             Equ     0x1F                ;Constant for baud generator 7812.5 bauds at 4 Mhz
+                      00012 
+                      00013 ;-----------------------------------------------------------------------------
+                      00014 ; Pins assignements
+                      00015 
+  00000000            00016 RB0                 EQU         0
+  00000001            00017 RB1                 EQU         1
+  00000002            00018 RB2                 EQU         2
+  00000003            00019 RB3                 EQU         3
+  00000004            00020 RB4                 EQU         4
+  00000005            00021 RB5                 EQU         5
+  00000006            00022 RB6                 EQU         6
+  00000007            00023 RB7                 EQU         7
+                      00024 
+                      00025 ;-----------------------------------------------------------------------------
+                      00026 
+  00000004            00027 JUMPER4                     EQU         RB4                                     ;Choix mode PS/2 (0V) di
+                            recte OU tranlation ATARI (+5V)
+  00000005            00028 JUMPER5                     EQU         RB5                                     
+                      00029 
+  00000006            00030 LEDGREEN                    EQU         RB6
+  00000007            00031 LEDYELLOW                   EQU         RB7
+                      00032 
+                      00033 ;-----------------------------------------------------------------------------
+                      00034 
+                      00035 #define SCL     PORTA,1         ; bus clock line
+                      00036 #define SDA     PORTA,4         ; bus data line
+                      00037 
+                      00038 ;-----------------------------------------------------------------------------
+                      00039 ;       define specifics I2C Start and Stop for 16F628 and 16F876
+                      00040 
+                      00041 ANY_I2C_START MACRO
+                      00042                 bsf     SDA                                             ; SDA high
+                      00043                 nop
+                      00044                 Bank1           
+                      00045                 bsf     TRISA, 1                                ; SCL high (input)              
+                      00046                 Bank0
+                      00047                 bcf     SDA                                             ; SDA low (start)
+                      00048                 ENDM
+                      00049 
+                      00050 ANY_I2C_STOP MACRO                                              ; assumes SCL is high on entry
+                      00051                 bcf     SDA                                             ; SDA low
+                      00052                 nop
+                      00053                 nop
+                      00054                 Bank1
+                      00055                 bsf     TRISA, 1                                ; SCL high (input)
+                      00056                 Bank0
+                      00057                 bsf     SDA                                             ; SDA high
+                      00058                 ENDM
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE  4
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00059                 
+                      00060 ;-----------------------------------------------------------------------------
+                      00061 ;Macros to select the register bank
+                      00062 ;Many bank changes can be optimised when only one STATUS bit changes
+                      00063 
+                      00064 Bank0   MACRO                                           ;macro to select data RAM bank 0
+                      00065                 bcf     STATUS,RP0
+                      00066                 bcf     STATUS,RP1
+                      00067                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+                      00068                 ENDM
+                      00069 
+                      00070 Bank1   MACRO                                           ;macro to select data RAM bank 1
+                      00071                 bsf     STATUS,RP0
+                      00072                 bcf     STATUS,RP1
+                      00073                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+                      00074                 ENDM
+                      00075 
+                      00076 Bank2   MACRO                                           ;macro to select data RAM bank 2
+                      00077                 bcf     STATUS,RP0
+                      00078                 bsf     STATUS,RP1
+                      00079                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+                      00080                 ENDM
+                      00081 
+                      00082 Bank3   MACRO                                           ;macro to select data RAM bank 3
+                      00083                 bsf     STATUS,RP0
+                      00084                 bsf     STATUS,RP1
+                      00085                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+                      00086                 ENDM
+                      00087 
+                      00088 ;-----------------------------------------------------------------------------
+                      00089 Delay           macro   Time            ;Delay "Cycles" instruction cycles
+                      00090 
+                      00091     if (Time==1)
+                      00092           nop
+                      00093           exitm
+                      00094     endif
+                      00095     if (Time==2)
+                      00096           goto $ + 1
+                      00097           exitm
+                      00098     endif
+                      00099     if (Time==3)
+                      00100           nop
+                      00101           goto $ + 1
+                      00102           exitm
+                      00103     endif
+                      00104     if (Time==4)
+                      00105           goto $ + 1
+                      00106           goto $ + 1
+                      00107           exitm
+                      00108     endif
+                      00109     if (Time==5)
+                      00110           goto $ + 1
+                      00111           goto $ + 1
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE  5
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00112           nop
+                      00113           exitm
+                      00114     endif
+                      00115     if (Time==6)
+                      00116           goto $ + 1
+                      00117           goto $ + 1
+                      00118           goto $ + 1
+                      00119           exitm
+                      00120     endif
+                      00121     if (Time==7)
+                      00122           goto $ + 1
+                      00123           goto $ + 1
+                      00124           goto $ + 1
+                      00125           nop
+                      00126           exitm
+                      00127     endif
+                      00128     if (Time%4==0)
+                      00129           movlw (Time-4)/4
+                      00130           call Delay_Routine
+                      00131           exitm
+                      00132     endif
+                      00133     if (Time%4==1)
+                      00134           movlw (Time-5)/4
+                      00135           call Delay_Routine
+                      00136           nop
+                      00137           exitm
+                      00138     endif
+                      00139     if (Time%4==2)
+                      00140           movlw (Time-6)/4
+                      00141           call Delay_Routine
+                      00142           goto $ + 1
+                      00143           exitm
+                      00144     endif
+                      00145     if (Time%4==3)
+                      00146           movlw (Time-7)/4
+                      00147           call Delay_Routine
+                      00148           goto $ + 1
+                      00149           nop
+                      00150           exitm
+                      00151     endif
+                      00152     endm
+                      00153 
+                      00154 ;------------------------------------------------------------------------
+                      00155 
+                      00086 
+                      00087 ;       Set the correct configuration bits regarding the CPU
+                      00088 #ifdef  __16F876
+Message[301]: MESSAGE: (Processor: Config bits are for 16F876.)
+                      00089         MESSG "Processor: Config bits are for 16F876."
+2007   3F31           00090     __CONFIG _BODEN_OFF & _CP_OFF & _PWRTE_ON & _WDT_OFF & _WRT_ENABLE_ON & _XT_OSC & _DEBUG_OFF & _CPD_
+                            OFF & _LVP_OFF
+                      00091 #endif
+                      00092 
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE  6
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00093 
+                      00094 #ifdef  __16F628
+                      00095         MESSG "Processor: Config bits are for 16F628."
+                      00096     __CONFIG _BODEN_OFF & _CP_OFF & _PWRTE_ON & _WDT_OFF & _XT_OSC & _CPD_OFF & _LVP_OFF & _MCLRE_OFF
+                      00097 #endif
+                      00098 
+                      00099 ;-----------------------------------------------------------------------------
+                      00100 ;       Global variables in RAM
+                      00101 
+                      00102 ;       Bank 0
+  00000020            00103 RSBufIndex              equ             0x20
+  00000021            00104 RSBufStart              equ             0x21
+  00000030            00105 RSBufEnd                equ             0x30
+  00000031            00106 RSCharRec               equ             0x31
+  00000032            00107 MODEM_STATUS    equ             0x32                                    ;bit0 = Echo On/Off
+                      00108 ;       
+  00000040            00109 SCRATCH                 equ     0x40                                    ; 1 by general-purpose scratchpa
+                            d
+  00000041            00110 TMP                             equ     0x41                                    ; temp register
+  00000042            00111 TMP2                    equ     0x42                                    ; temp register
+  00000043            00112 COUNT                   equ     0x43
+                      00113 ; Used for RTC
+  00000044            00114 YRS                             equ     0x44
+  00000045            00115 MON                             equ     0x45
+  00000046            00116 DOW                             equ     0x46
+  00000047            00117 DAYS                    equ     0x47
+  00000048            00118 HRS                             equ     0x48
+  00000049            00119 MINS                    equ     0x49
+  0000004A            00120 SECS                    equ     0x4a
+                      00121 
+                      00122 ;       Must be in area from 0x70 (Mirror in any bank)
+  00000070            00123 w_temp                  equ     0x70                                    ;variable used for context savin
+                            g
+  00000071            00124 status_temp             equ     0x71                                    ;variable used for context savin
+                            g
+                      00125 ;pclath_temp            equ             0x73    
+                      00126 ;fsr_temp               equ             0x74
+  00000072            00127 TimerCount              equ             0x72                                    ;counter for the timer
+                      00128 
+                      00129 ;       Can be localized in bank 0
+  00000087            00130 OPTIONVAL               equ     0x87                                    ;Résistance pull-up OFF & Présca
+                            ler timer à 256 
+  000000A0            00131 INTERMASK               equ             0xA0                                    ;Interruptions sur tmr0 
+  0000000D            00132 CARRIAGE_RETURN equ             0x0D
+  0000000A            00133 LINE_FEED               equ             0x0A
+  0000001A            00134 CTRLZ                   equ             0x1A
+                      00135 
+                      00136 ;-----------------------------------------------------------------------------
+                      00137 ;       comment this macro to allow to run in simulator: Char are not send in the UART
+                      00138 
+                      00139 #define         TOBURN    1                                             ; Simulation mode OU in circuit
+                      00140 
+                      00141 ;       comment this macro to remove all codes about DS1307/I2C and specifics commands
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE  7
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00142 #define                 DS1307_INCLUDED 1
+                      00143 
+                      00144 ;-----------------------------------------------------------------------------
+                      00145 
+0000                  00146                         ORG     0x000                                   ; processor reset vector
+0000   018A           00147 Start:          clrf    PCLATH                                  ; ensure page bits are cleared
+0001   28FC           00148                 goto    Startup                         ; go to beginning of program
+                      00149 
+                      00150 ;-----------------------------------------------------------------------------
+                      00151 ;       Interrupt code: Becarefull that switch to bank 0
+                      00152 ;-----------------------------------------------------------------------------
+                      00153 
+0004                  00154                         ORG     0x004                           ; interrupt vector location
+0004   00F0           00155                         movwf   w_temp                          ; save off current W register contents
+0005   0803           00156                         movf    STATUS,w                        ; move status register into W register
+                      00157                                 ;clrf   status                                  ;ensure we are in bank 0
+                             now! NOT USED FOR NOW
+0006   00F1           00158                         movwf   status_temp                     ; save off contents of STATUS register
+                      00159 
+                      00160                                 ;movf   PCLATH,w                                ;save pclath.NOT USED FO
+                            R NOW
+                      00161                                 ;movwf  pclath_temp                             ;!!! SUBTLE GOTCHA !!! T
+                            his one doesn't bite you until you have code that
+                      00162                                                                                                 ;crosses
+                             page boundaries. How insidious!
+                      00163                                 ;clrf   PCLATH                                  ;explicitly select Page 
+                            0
+                      00164 
+                      00165                                 ;movf   FSR,w
+                      00166                                 ;movwf  fsr_temp                                ;save fsr (just in case)
+                      00167 
+                      00168                                 ; code start
+0007   110B           00169                                 bcf             INTCON,T0IF                             ;clear the overf
+                            low timer 0
+                      00170 
+0008   3040           00171                                 movlw   b'01000000'                     ;sélectionner bit à inverser 
+0009   0686           00172                                 xorwf   PORTB,f                                 ;inverser LED 
+                      00173 
+                      00174 
+000A   0872           00175                                 movf    TimerCount,w
+000B   3800           00176                                 iorlw   0x00
+000C   1D03           00177                                 btfss   STATUS,Z                                ;check if timercount is 
+                            null => Z=1     
+000D   03F2           00178                                 decf    TimerCount,f                    ;Z=0, just decrement interrupt c
+                            ount
+                      00179                                 ; code end
+                      00180 
+000E                  00181 IntEnd:         
+                      00182                                 ;movf   fsr_temp,w                              ;NOT USED FOR NOW
+                      00183                                 ;movwf  FSR                                             ;restore fsr
+                      00184         
+                      00185                                 ;movf   pclath_temp,w
+                      00186                                 ;movwf  PCLATH                                  ;restore pclath. (Page=o
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE  8
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                            riginal)
+                      00187 
+000E   0871           00188                                 movf    status_temp,w                   ; retrieve copy of STATUS regist
+                            er
+000F   0083           00189                 movwf   STATUS                          ; restore pre-isr STATUS register contents
+0010   0EF0           00190                 swapf   w_temp,f
+0011   0E70           00191                 swapf   w_temp,w                        ; restore pre-isr W register contents
+0012   0009           00192                 retfie                                  ; return from interrupt
+                      00193 
+                      00194 ;-----------------------------------------------------------------------------
+                      00195 ;                               Text strings for RTC user interface
+                      00196 ;-----------------------------------------------------------------------------
+                      00197 
+                      00198 ;Welcome text
+0013                  00199 banner:         
+0013   344C 3446 3444 00200                                 dt      "LFD-PICModem 0.50\r\n",0h
+       342D 3450 3449 
+       3443 344D 346F 
+       3464 3465 346D 
+       3420 3430 342E 
+       3435 3430 340D 
+       340A 3400 
+                      00201 
+                      00202 ;   Chaine de caracteres succès de AT+CMGS
+0027                  00203 CMGSRes:
+0027   340D 340A 342B 00204                                 dt      "\r\n+CMGS: 198\n\r",0h
+       3443 344D 3447 
+       3453 343A 3420 
+       3431 3439 3438 
+       340A 340D 3400 
+                      00205 
+                      00206 ;   Chaine de caracteres succès de AT+CMGL
+0036                  00207 CMGLRes:                
+0036   342B 3443 344D 00208                                 dt      "+CMGL: 1,\"REC UNREAD\",\"+33612345678\",,\"27/09/10,15:00:00+3
+                            2\"\n\rHello...\n\r",0h
+       3447 344C 343A 
+       3420 3431 342C 
+       3422 3452 3445 
+       3443 3420 3455 
+       344E 3452 3445 
+       3441 3444 3422 
+       342C 3422 342B 
+       3433 3433 3436 
+       3431 3432 3433 
+       3434 3435 3436 
+       3437 3438 3422 
+       342C 342C 3422 
+       3432 3437 342F 
+       3430 3439 342F 
+       3431 3430 342C 
+       3431 343
+                      00209 
+                      00210 ;   Chaine de caracteres ERROR message
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE  9
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+007F                  00211 TXError:
+007F   340D 340A 3445 00212                                 dt      "\r\nERROR\r\n",0h
+       3452 3452 344F 
+       3452 340D 340A 
+       3400 
+                      00213 
+                      00214 ;   Chaine de caracteres OK message
+0089                  00215 TXOk:
+0089   340D 340A 344F 00216                                 dt      "\r\nOK\r\n",0h
+       344B 340D 340A 
+       3400 
+                      00217 
+                      00218 #ifdef  DS1307_INCLUDED
+0090                  00219 year:
+0090   340A 340D 3459 00220                                 dt      "\n\rYear (0-99):",0h
+       3465 3461 3472 
+       3420 3428 3430 
+       342D 3439 3439 
+       3429 343A 3400 
+009F                  00221 month:
+009F   340A 340D 344D 00222                                 dt      "\n\rMonth (1-12):",0h
+       346F 346E 3474 
+       3468 3420 3428 
+       3431 342D 3431 
+       3432 3429 343A 
+       3400 
+00AF                  00223 dow:
+00AF   340A 340D 3444 00224                                 dt      "\n\rDay of Week (1-7):",0h
+       3461 3479 3420 
+       346F 3466 3420 
+       3457 3465 3465 
+       346B 3420 3428 
+       3431 342D 3437 
+       3429 343A 3400 
+00C4                  00225 date:
+00C4   340A 340D 3444 00226                                 dt      "\n\rDate (1-28,29,30,31):",0h
+       3461 3474 3465 
+       3420 3428 3431 
+       342D 3432 3438 
+       342C 3432 3439 
+       342C 3433 3430 
+       342C 3433 3431 
+       3429 343A 3400 
+00DC                  00227 hour:
+00DC   340A 340D 3448 00228                                 dt      "\n\rHour (0-23):",0h
+       346F 3475 3472 
+       3420 3428 3430 
+       342D 3432 3433 
+       3429 343A 3400 
+00EB                  00229 minute:
+00EB   340A 340D 344D 00230                                 dt      "\n\rMinute (0-59):",0h
+       3469 346E 3475 
+       3474 3465 3420 
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 10
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+       3428 3430 342D 
+       3435 3439 3429 
+       343A 3400 
+                      00231 #endif
+                      00232 
+                      00233 ;-----------------------------------------------------------------------------
+                      00234 ;                       Startup, initialisation
+                      00235 ;-----------------------------------------------------------------------------
+                      00236 
+00FC   223E           00237 Startup:                call    InitPortB
+                      00238 
+00FD   3080           00239                 movlw   b'10000000'                     ;set lacths B to 0 and set On LEDs
+00FE   0086           00240                 movwf   PORTB                           
+                      00241 
+00FF   2245           00242                 call    RSSetup                         ;setup RS-232 port at 9600 or 7812.5            
+                                
+                      00243 
+                      00244 ;timer0 activation
+                      00245                                 Bank1
+0100   1683               M                 bsf     STATUS,RP0
+0101   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+                      00246                                 errorlevel -302                                 ;Suppress 'Messages' in 
+                            compiler output
+                      00247 
+0102   3087           00248                                 movlw   OPTIONVAL                               ;charger masque 
+0103   0081           00249                                 movwf   OPTION_REG                              ;Configure Timer 0 worki
+                            ng
+                      00250 
+                      00251                                 errorlevel +302                                 ;Restore 'Messages' in c
+                            ompiler output  
+                      00252 
+                      00253                                 Bank0
+0104   1283               M                 bcf     STATUS,RP0
+0105   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+0106   3007           00254                                 movlw   7                                               ;7 interrupt to 
+                            get a 0.5 sec period
+0107   00F2           00255                                 movwf   TimerCount                              ;initialiser compteur de
+                             passages
+                      00256 
+0108   30A0           00257                                 movlw   INTERMASK                               ;masque interruption 
+0109   008B           00258                                 movwf   INTCON                                  ;Enable GIE and Timer0 
+                      00259 ;endactivation
+                      00260 
+                      00261                 ;call    RSWelcome                              ;send this string
+010A   3012           00262                                 movlw   banner-1                                ; move label address int
+                            o W register
+010B   2364           00263                                 call    RSPrint                                 ; print string starting 
+                            at address of label
+                      00264 
+010C   3021           00265                                 movlw   RSBufStart                              ;Clear index pointer in 
+                            RSBuffer to the start
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 11
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+010D   00A0           00266                                 movwf   RSBufIndex
+                      00267 
+010E   1432           00268                                 bsf             MODEM_STATUS,0                  ;Echo On (ATE1)
+                      00269 
+                      00270 ;-----------------------------------------------------------------------------
+                      00271 ;                       Main loop
+                      00272 ;-----------------------------------------------------------------------------
+010F   0872           00273 Main:                   movf    TimerCount,w                    ;Load timercount about the interrupt
+0110   3800           00274                                 iorlw   0x00                                    
+0111   1D03           00275                                 btfss   STATUS,Z                                ;check if timercount is 
+                            null => Z=1
+0112   2917           00276                                 goto    Next                                    ;jump if Z=0, not null
+                      00277 
+0113   3080           00278                                 movlw   b'10000000'                     ;sélectionner bit à inverser 
+0114   0686           00279                                 xorwf   PORTB,f                                 ;inverser LED 
+                      00280                                 
+0115   3007           00281                                 movlw   7                                               ;pour 7 nouveaux
+                             passages 
+0116   00F2           00282                                 movwf   TimerCount                              ;dans compteur de passag
+                            es      
+                      00283 
+0117                  00284 Next:           ;       movlw   'A'                                             ;test code dummy pour fo
+                            rcer commande
+                      00285                         ;       movwf   RSBufStart                              ;test code dummy pour fo
+                            rcer commande
+                      00286                         ;       movlw   'T'                                             ;test code dummy
+                             pour forcer commande
+                      00287                         ;       movwf   RSBufStart+1                    ;test code dummy pour forcer com
+                            mande
+                      00288                         ;       movlw   '+'                                             ;test code dummy
+                             pour forcer commande
+                      00289                         ;       movwf   RSBufStart+2                    ;test code dummy pour forcer com
+                            mande
+                      00290                         ;       movlw   'C'                                             ;test code dummy
+                             pour forcer commande
+                      00291                         ;       movwf   RSBufStart+3                    ;test code dummy pour forcer com
+                            mande
+                      00292                         ;       movlw   'M'                                             ;test code dummy
+                             pour forcer commande
+                      00293                         ;       movwf   RSBufStart+4                    ;test code dummy pour forcer com
+                            mande
+                      00294                         ;       movlw   'G'                                             ;test code dummy
+                             pour forcer commande
+                      00295                         ;       movwf   RSBufStart+5                    ;test code dummy pour forcer com
+                            mande
+                      00296                         ;       movlw   'S'                                             ;test code dummy
+                             pour forcer commande
+                      00297                         ;       movwf   RSBufStart+6                    ;test code dummy pour forcer com
+                            mande
+                      00298                         ;       movlw   0x25                                    ;test code dummy pour fo
+                            rcer commande
+                      00299                         ;       movwf   RSBufIndex                              ;test code dummy pour fo
+                            rcer commande
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 12
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00300                         ;       goto    Analyse                                 ;test code dummy pour fo
+                            rcer commande
+                      00301 
+0117   2256           00302                                 call    RSRecv                                  ;Check for a byte in W r
+                            egister
+0118   1903           00303                                 btfsc   STATUS,Z                                ;if Z=0 a byte is receiv
+                            ed in W
+0119   290F           00304                                 goto    Main                                    ;case of no byte
+                      00305 
+011A   00B1           00306                                 movwf   RSCharRec                               ;Save the ASCII charcate
+                            r received
+011B   223B           00307                                 call    RSEcho                                  ;Send the W register con
+                            tent                            
+                      00308 
+011C   3A0D           00309                                 xorlw   CARRIAGE_RETURN                 ;Is a RETURN ?
+011D   1903           00310                                 btfsc   STATUS,Z                                ;No, Z=0, other ASCII co
+                            de
+011E   292B           00311                                 goto    Analyse                                 ;Yes, Z=1, this is a CR
+                      00312 
+011F   0820           00313 Store:                  movf    RSBufIndex,w                    ;Check if end of buffer reach
+0120   3A30           00314                                 xorlw   RSBufEnd
+0121   1903           00315                                 btfsc   STATUS,Z                                ;No, Z=0, not the buffer
+                             end
+0122   290F           00316                                 goto    Main                                    ;Yes, end of buffer reac
+                            h
+                      00317 
+0123   0820           00318                                 movf    RSBufIndex,w                    ;End buffer not reach
+0124   0084           00319                                 movwf   FSR                                             ;Use indirect ad
+                            ressing mode with FSR/INDF
+0125   1383           00320                                 bcf     STATUS,IRP                              ;page 0
+0126   0831           00321                                 movf    RSCharRec,w                             ;retrieve ASCII code
+0127   0080           00322                                 movwf   INDF                                    ;store it into the buffe
+                            r
+0128   0A04           00323                                 incf    FSR,w                                   ;increment the indirect 
+                            pointer
+0129   00A0           00324                                 movwf   RSBufIndex                              ;save it
+                      00325 
+012A   290F           00326                                 goto    Main                                    ;Loop for ever
+                      00327 
+                      00328 ;-----------------------------------------------------------------------------
+                      00329 ;                       Analyse the command received on CARRIAGE RETURN
+                      00330 ;-----------------------------------------------------------------------------
+                      00331 
+012B                  00332 Analyse:                ;Send a Linefeed before
+012B   300A           00333                                 movlw   LINE_FEED
+012C   223B           00334                                 call    RSEcho                                  ;Send the W register con
+                            tent
+                      00335 
+                      00336                                 ;Analyse si A et T recu
+012D   3021           00337                                 movlw   RSBufStart
+012E   0084           00338                                 movwf   FSR                                             ;Use indirect ad
+                            ressing mode with FSR/INDF
+012F   1383           00339                                 bcf     STATUS,IRP                              ;page 0
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 13
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0130   3041           00340                                 movlw   'A'
+0131   0600           00341                                 xorwf   INDF,w
+0132   1D03           00342                                 btfss   STATUS,Z
+0133   293A           00343                                 goto    AnErr
+                      00344 
+0134   0A84           00345                                 incf    FSR,f
+0135   3054           00346                                 movlw   'T'
+0136   0600           00347                                 xorwf   INDF,w
+0137   1D03           00348                                 btfss   STATUS,Z
+0138   293A           00349                                 goto    AnErr
+0139   293D           00350                                 goto    ATOK
+                      00351 
+013A   307E           00352 AnErr:                  movlw   TXError-1                               ; move label address into W regi
+                            ster
+013B   2364           00353                                 call    RSPrint                                 ; print string starting 
+                            at address of label
+013C   295E           00354                                 goto    AnEnd
+                      00355 
+013D   21B5           00356 ATOK:                   call    CheckIfATE                              ;Try to execute ATE0/ATE1
+013E   1D03           00357                                 btfss   STATUS,Z
+013F   295C           00358                                 goto    AnOk                                    ;ATE done if Z=0
+                      00359 
+0140   3021           00360                                 movlw   RSBufStart                              ;replace dans FSR index+
+                            1 du tampon qui a été perdu
+0141   3E01           00361                                 addlw   +1
+0142   0084           00362                                 movwf   FSR     
+                      00363 
+0143   21CB           00364                                 call    CheckIfATV                              ;Try to execute AT&V if 
+                            possible
+0144   1D03           00365                                 btfss   STATUS,Z
+0145   295C           00366                                 goto    AnOk
+                      00367 
+                      00368 #ifdef  DS1307_INCLUDED
+0146   3021           00369                                 movlw   RSBufStart                              ;replace dans FSR index+
+                            1 du tampon qui a été perdu
+0147   3E01           00370                                 addlw   +1
+0148   0084           00371                                 movwf   FSR     
+                      00372 
+0149   21EA           00373                                 call    CheckIfATWR                             ;Try to execute ATWriteC
+                            lock on DS1307 if possible
+014A   1D03           00374                                 btfss   STATUS,Z
+014B   295C           00375                                 goto    AnOk
+                      00376 
+014C   3021           00377                                 movlw   RSBufStart                              ;replace dans FSR index+
+                            1 du tampon qui a été perdu
+014D   3E01           00378                                 addlw   +1
+014E   0084           00379                                 movwf   FSR     
+                      00380 
+014F   21DB           00381                                 call    CheckIfATRD                             ;Try to execute ATReadCl
+                            ock on DS1307 if possible
+0150   1D03           00382                                 btfss   STATUS,Z
+0151   295C           00383                                 goto    AnOk
+                      00384 #endif
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 14
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00385 
+0152   3021           00386                                 movlw   RSBufStart                              ;replace dans FSR index+
+                            1 du tampon qui a été perdu
+0153   3E01           00387                                 addlw   +1
+0154   0084           00388                                 movwf   FSR                                             
+                      00389 
+0155   218D           00390                                 call    CheckIfCMGS                             ;Try to execute AT+CMGS 
+                            if possible
+0156   1D03           00391                                 btfss   STATUS,Z
+0157   295C           00392                                 goto    AnOk                                    ;ATE done if Z=0
+                      00393 
+0158   3021           00394                                 movlw   RSBufStart                              ;replace dans FSR index+
+                            1 du tampon qui a été perdu
+0159   3E01           00395                                 addlw   +1
+015A   0084           00396                                 movwf   FSR     
+                      00397 
+015B   216E           00398                                 call    CheckIfCMGL                             ;Try to execute AT+CMGL 
+                            if possible
+                      00399 
+015C   3088           00400 AnOk:                   movlw   TXOk-1                                  ;move label address into W regis
+                            ter
+015D   2364           00401                                 call    RSPrint                                 ;print string starting a
+                            t address of label
+                      00402 
+                      00403 ;       Analyse end
+015E   3021           00404 AnEnd:                  movlw   RSBufStart                              ;Reset index pointer in RSBuffer
+015F   00A0           00405                                 movwf   RSBufIndex
+                      00406                                 
+0160   3A30           00407 CleanBuf:               xorlw   RSBufEnd
+0161   1903           00408                                 btfsc   STATUS,Z                                ;No, Z=0, not the buffer
+                             end
+0162   296B           00409                                 goto    AnExit                                  ;Yes, end of buffer reac
+                            h
+                      00410 
+0163   0820           00411                                 movf    RSBufIndex,w                    ;End buffer not reach
+0164   0084           00412                                 movwf   FSR                                             ;Use indirect ad
+                            ressing mode with FSR/INDF
+0165   1383           00413                                 bcf     STATUS,IRP                              ;page 0
+0166   3000           00414                                 movlw   0x00
+0167   0080           00415                                 movwf   INDF                                    ;store it into the buffe
+                            r
+0168   0A04           00416                                 incf    FSR,w                                   ;increment the indirect 
+                            pointer
+0169   00A0           00417                                 movwf   RSBufIndex                              ;save it                
+                                            
+                      00418                                 
+016A   2960           00419                                 goto    CleanBuf
+                      00420                                 
+016B   3021           00421 AnExit:                 movlw   RSBufStart                              ;Reset index pointer in RSBuffer
+016C   00A0           00422                                 movwf   RSBufIndex
+                      00423                                         
+016D   290F           00424                                 goto    Main
+                      00425 
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 15
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00426 ;-----------------------------------------------------------------------------
+                      00427 ;   Analyse si la suite de la comande AT recu est +CMGL
+                      00428 ;       FSR/INDF register must seek the last char 'T'
+                      00429 ;       doesn't change current data bank.
+                      00430 ;-----------------------------------------------------------------------------
+                      00431 
+016E   0A84           00432 CheckIfCMGL:    incf    FSR,f
+016F   302B           00433                                 movlw   '+'
+0170   0600           00434                                 xorwf   INDF,w
+0171   1D03           00435                                 btfss   STATUS,Z
+0172   298B           00436                                 goto    ATCMGLfailed
+                      00437 
+0173   0A84           00438                                 incf    FSR,f
+0174   3043           00439                                 movlw   'C'
+0175   0600           00440                                 xorwf   INDF,w
+0176   1D03           00441                                 btfss   STATUS,Z
+0177   298B           00442                                 goto    ATCMGLfailed
+                      00443 
+0178   0A84           00444                                 incf    FSR,f
+0179   304D           00445                                 movlw   'M'
+017A   0600           00446                                 xorwf   INDF,w
+017B   1D03           00447                                 btfss   STATUS,Z
+017C   298B           00448                                 goto    ATCMGLfailed
+                      00449                                 
+017D   0A84           00450                                 incf    FSR,f
+017E   3047           00451                                 movlw   'G'
+017F   0600           00452                                 xorwf   INDF,w
+0180   1D03           00453                                 btfss   STATUS,Z
+0181   298B           00454                                 goto    ATCMGLfailed
+                      00455 
+0182   0A84           00456                                 incf    FSR,f
+0183   304C           00457                                 movlw   'L'
+0184   0600           00458                                 xorwf   INDF,w
+0185   1D03           00459                                 btfss   STATUS,Z
+0186   298B           00460                                 goto    ATCMGLfailed
+                      00461 
+0187   3035           00462                                 movlw   CMGLRes-1                               ; move label address int
+                            o W register
+0188   2364           00463                                 call    RSPrint                                 ; print string sresponse
+                             for +CMGL
+                      00464 
+0189   1103           00465                                 bcf             STATUS,Z
+018A   0008           00466                                 return
+                      00467 
+018B   1503           00468 ATCMGLfailed:   bsf             STATUS,Z                                ;Z=1, this is not an AT+CMGL com
+                            mand
+018C   0008           00469                                 return
+                      00470 
+                      00471 ;-----------------------------------------------------------------------------
+                      00472 ;   Analyse si la suite de la comande AT recu est +CMGS
+                      00473 ;       FSR/INDF register must seek the last char 'T'
+                      00474 ;       doesn't change current data bank.
+                      00475 ;-----------------------------------------------------------------------------
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 16
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00476 
+018D   0A84           00477 CheckIfCMGS:    incf    FSR,f
+018E   302B           00478                                 movlw   '+'
+018F   0600           00479                                 xorwf   INDF,w
+0190   1D03           00480                                 btfss   STATUS,Z
+0191   29B3           00481                                 goto    ATCMGSfailed
+                      00482 
+0192   0A84           00483                                 incf    FSR,f
+0193   3043           00484                                 movlw   'C'
+0194   0600           00485                                 xorwf   INDF,w
+0195   1D03           00486                                 btfss   STATUS,Z
+0196   29B3           00487                                 goto    ATCMGSfailed
+                      00488 
+0197   0A84           00489                                 incf    FSR,f
+0198   304D           00490                                 movlw   'M'
+0199   0600           00491                                 xorwf   INDF,w
+019A   1D03           00492                                 btfss   STATUS,Z
+019B   29B3           00493                                 goto    ATCMGSfailed
+                      00494                                 
+019C   0A84           00495                                 incf    FSR,f
+019D   3047           00496                                 movlw   'G'
+019E   0600           00497                                 xorwf   INDF,w
+019F   1D03           00498                                 btfss   STATUS,Z
+01A0   29B3           00499                                 goto    ATCMGSfailed
+                      00500 
+01A1   0A84           00501                                 incf    FSR,f
+01A2   3053           00502                                 movlw   'S'
+01A3   0600           00503                                 xorwf   INDF,w
+01A4   1D03           00504                                 btfss   STATUS,Z
+01A5   29B3           00505                                 goto    ATCMGSfailed
+                      00506 
+01A6   303E           00507                                 movlw   '>'                                             ;SMS text expect
+                            ed
+01A7   225F           00508                                 call    RSSend
+                      00509 
+01A8   2256           00510 SMSTextLoop:    call    RSRecv                                  ;Check for a byte in W register
+01A9   1903           00511                                 btfsc   STATUS,Z                                ;if Z=0 a byte is receiv
+                            ed in W
+01AA   29A8           00512                                 goto    SMSTextLoop                             ;case of no byte
+                      00513                                 
+01AB   225F           00514                                 call    RSSend                                  ;Send the W register con
+                            tent
+                      00515 
+01AC   3A1A           00516                                 xorlw   CTRLZ                                   ;is the text end ? CTRL-
+                            Z ?
+01AD   1D03           00517                                 btfss   STATUS,Z
+01AE   29A8           00518                                 goto    SMSTextLoop
+                      00519 
+01AF   3026           00520                                 movlw   CMGSRes-1                               ; move label address int
+                            o W register
+01B0   2364           00521                                 call    RSPrint                                 ; print string response 
+                            for +CMGS
+                      00522 
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 17
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+01B1   1103           00523                                 bcf             STATUS,Z
+01B2   0008           00524                                 return
+                      00525 
+01B3   1503           00526 ATCMGSfailed:   bsf             STATUS,Z                                ;Z=1, this is not an AT+CMGS com
+                            mand
+01B4   0008           00527                                 return
+                      00528 
+                      00529 ;-----------------------------------------------------------------------------
+                      00530 ;   Analyse si la suite de la comande AT recu est E0 ou E1
+                      00531 ;       FSR/INDF register must seek the last char 'T'
+                      00532 ;       doesn't change current data bank.
+                      00533 ;-----------------------------------------------------------------------------
+                      00534 
+01B5                  00535 CheckIfATE:             
+01B5   0A84           00536                                 incf    FSR,f
+01B6   3045           00537                                 movlw   'E'
+01B7   0600           00538                                 xorwf   INDF,w
+01B8   1D03           00539                                 btfss   STATUS,Z
+01B9   29C9           00540                                 goto    ATEfailed
+                      00541                                 
+01BA   0A84           00542                                 incf    FSR,f
+01BB   3030           00543                                 movlw   '0'
+01BC   0600           00544                                 xorwf   INDF,w
+01BD   1D03           00545                                 btfss   STATUS,Z        
+01BE   29C2           00546                                 goto    ISITATE1                                ;Est ce ATE1 ?
+                      00547 
+01BF   1032           00548 ATE0:                   bcf             MODEM_STATUS,0                  ;C'est ATE0
+01C0   1103           00549                                 bcf             STATUS,Z                                ;Z=0, this is th
+                            e ATEx command
+01C1   0008           00550                                 return
+                      00551 
+01C2   3031           00552 ISITATE1:               movlw   '1'
+01C3   0600           00553                                 xorwf   INDF,w
+01C4   1D03           00554                                 btfss   STATUS,Z
+01C5   29C9           00555                                 goto    ATEfailed                               ;ce n'est pas ATE1
+01C6   1432           00556                                 bsf             MODEM_STATUS,0                  ;C'est ATE1
+01C7   1103           00557                                 bcf             STATUS,Z                                ;Z=0, this is th
+                            e ATEx command
+01C8   0008           00558                                 return
+                      00559 
+01C9   1503           00560 ATEfailed:              bsf             STATUS,Z                                ;Z=1, this is not an ATE
+                            x command
+01CA   0008           00561                                 return
+                      00562 
+                      00563 ;-----------------------------------------------------------------------------
+                      00564 ;   Analyse si la suite de la comande AT recu est &V
+                      00565 ;       FSR/INDF register must seek the last char 'T'
+                      00566 ;       doesn't change current data bank.
+                      00567 ;-----------------------------------------------------------------------------
+                      00568 
+01CB                  00569 CheckIfATV:             
+01CB   0A84           00570                                 incf    FSR,f
+01CC   3026           00571                                 movlw   '&'
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 18
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+01CD   0600           00572                                 xorwf   INDF,w
+01CE   1D03           00573                                 btfss   STATUS,Z
+01CF   29C9           00574                                 goto    ATEfailed
+                      00575                                 
+01D0   0A84           00576                                 incf    FSR,f
+01D1   3056           00577                                 movlw   'V'
+01D2   0600           00578                                 xorwf   INDF,w
+01D3   1D03           00579                                 btfss   STATUS,Z        
+01D4   29D9           00580                                 goto    ATVfailed
+                      00581 
+01D5   3012           00582                                 movlw   banner-1                                ; move label address int
+                            o W register
+01D6   2364           00583                                 call    RSPrint                                 ; print string banner as
+                             reponse
+                      00584 
+01D7   1103           00585                                 bcf             STATUS,Z                                ;Z=0, this is th
+                            e ATEx command
+01D8   0008           00586                                 return
+                      00587 
+01D9   1503           00588 ATVfailed:              bsf             STATUS,Z                                ;Z=1, this is not an ATE
+                            x command
+01DA   0008           00589                                 return
+                      00590 ;-----------------------------------------------------------------------------
+                      00591 ;   Analyse si la suite de la comande AT recu est RD (Read Clock)
+                      00592 ;       FSR/INDF register must seek the last char 'T'
+                      00593 ;       doesn't change current data bank.
+                      00594 ;-----------------------------------------------------------------------------
+                      00595 
+                      00596 #ifdef  DS1307_INCLUDED
+01DB                  00597 CheckIfATRD:            
+01DB   0A84           00598                                 incf    FSR,f
+01DC   3052           00599                                 movlw   'R'
+01DD   0600           00600                                 xorwf   INDF,w
+01DE   1D03           00601                                 btfss   STATUS,Z
+01DF   29E8           00602                                 goto    ATRDfailed
+                      00603                                 
+01E0   0A84           00604                                 incf    FSR,f
+01E1   3044           00605                                 movlw   'D'
+01E2   0600           00606                                 xorwf   INDF,w
+01E3   1D03           00607                                 btfss   STATUS,Z        
+01E4   29E8           00608                                 goto    ATRDfailed
+                      00609 
+                      00610                                 ;goto   ExecRDClock
+01E5   21F9           00611                                 call    ExecRDClock
+                      00612 
+01E6   1103           00613                                 bcf             STATUS,Z                                ;Z=0, this is th
+                            e ATEx command
+01E7   0008           00614                                 return
+                      00615 
+01E8   1503           00616 ATRDfailed:             bsf             STATUS,Z                                ;Z=1, this is not an ATE
+                            x command
+01E9   0008           00617                                 return
+                      00618 #endif
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 19
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00619 ;-----------------------------------------------------------------------------
+                      00620 ;   Analyse si la suite de la comande AT recu est WR (Write Clock)
+                      00621 ;       FSR/INDF register must seek the last char 'T'
+                      00622 ;       doesn't change current data bank.
+                      00623 ;-----------------------------------------------------------------------------
+                      00624 
+                      00625 #ifdef  DS1307_INCLUDED
+01EA                  00626 CheckIfATWR:            
+01EA   0A84           00627                                 incf    FSR,f
+01EB   3057           00628                                 movlw   'W'
+01EC   0600           00629                                 xorwf   INDF,w
+01ED   1D03           00630                                 btfss   STATUS,Z
+01EE   29F7           00631                                 goto    ATWRfailed
+                      00632                                 
+01EF   0A84           00633                                 incf    FSR,f
+01F0   3052           00634                                 movlw   'R'
+01F1   0600           00635                                 xorwf   INDF,w
+01F2   1D03           00636                                 btfss   STATUS,Z        
+01F3   29F7           00637                                 goto    ATWRfailed
+                      00638 
+01F4   2A1F           00639                                 goto    ExecWRClock
+                      00640 
+01F5   1103           00641 ATWREnd:                bcf             STATUS,Z                                ;Z=0, this is the ATEx c
+                            ommand
+01F6   0008           00642                                 return
+                      00643 
+01F7   1503           00644 ATWRfailed:             bsf             STATUS,Z                                ;Z=1, this is not an ATE
+                            x command
+01F8   0008           00645                                 return
+                      00646 #endif
+                      00647 ;-----------------------------------------------------------------------------
+                      00648 ;       execute the command Read Clock from DS1037 and display the result on the UART
+                      00649 ;-----------------------------------------------------------------------------
+                      00650 
+                      00651 #ifdef  DS1307_INCLUDED
+01F9                  00652 ExecRDClock:
+                      00653                                 ;       CR/LF before to write the date time
+01F9   300D           00654                                 movlw   CARRIAGE_RETURN
+01FA   225F           00655                                 call    RSSend
+01FB   300A           00656                                 movlw   LINE_FEED
+01FC   225F           00657                                 call    RSSend
+                      00658 
+01FD   228B           00659                                 call    RTC_brst_rd                             ; get the data from the 
+                            RTC
+                      00660 
+01FE                  00661 read_regs:
+01FE   3020           00662                                 movlw   20
+01FF   2277           00663                                 call    RSWriteBCD
+0200   0844           00664                                 movf    YRS,W
+0201   2277           00665                                 call    RSWriteBCD
+0202   302F           00666                                 movlw   '/'
+0203   225F           00667                                 call    RSSend
+0204   0845           00668                                 movf    MON,W
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 20
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0205   2277           00669                                 call    RSWriteBCD
+0206   302F           00670                                 movlw   '/'
+0207   225F           00671                                 call    RSSend
+0208   0847           00672                                 movf    DAYS,W
+0209   2277           00673                                 call    RSWriteBCD
+020A   3020           00674                                 movlw   ' '
+020B   225F           00675                                 call    RSSend
+020C   0846           00676                                 movf    DOW,W
+020D   2277           00677                                 call    RSWriteBCD
+020E   3020           00678                                 movlw   ' '
+020F   225F           00679                                 call    RSSend
+0210   0848           00680                                 movf    HRS,W
+0211   2277           00681                                 call    RSWriteBCD
+0212   303A           00682                                 movlw   ':'
+0213   225F           00683                                 call    RSSend
+0214   0849           00684                                 movf    MINS,W
+0215   2277           00685                                 call    RSWriteBCD
+0216   303A           00686                                 movlw   ':'
+0217   225F           00687                                 call    RSSend
+0218   084A           00688                                 movf    SECS,W
+0219   2277           00689                                 call    RSWriteBCD
+                      00690 
+                      00691                                 ;       CR/LF end of string
+021A   300D           00692                                 movlw   CARRIAGE_RETURN
+021B   225F           00693                                 call    RSSend
+021C   300A           00694                                 movlw   LINE_FEED
+021D   225F           00695                                 call    RSSend
+021E   0008           00696                                 return
+                      00697 #endif
+                      00698 ;-----------------------------------------------------------------------------
+                      00699 ;       execute the command Write Clock on the DS1037 with user-entered data 
+                      00700 ;-----------------------------------------------------------------------------
+                      00701 
+                      00702 #ifdef  DS1307_INCLUDED
+021F                  00703 ExecWRClock:
+021F   308F           00704                                 movlw   year-1                                  ; prompt user for data (
+                            year)
+0220   2364           00705                                 call    RSPrint
+0221   2265           00706                                 call    RSReadBCD                               ; get the data
+                      00707                         ;       movlw   0x15
+0222   00C4           00708                                 movwf   YRS                                             ; save it
+                      00709 
+0223   309E           00710                                 movlw   month-1                                 ; prompt user for data (
+                            month)
+0224   2364           00711                                 call    RSPrint
+0225   2265           00712                                 call    RSReadBCD
+                      00713                         ;       movlw   02
+0226   00C5           00714                                 movwf   MON
+                      00715 
+0227   30C3           00716                                 movlw   date-1                                  ; prompt user for data (
+                            month)
+0228   2364           00717                                 call    RSPrint
+0229   2265           00718                                 call    RSReadBCD
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 21
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00719                         ;       movlw   02
+022A   00C7           00720                                 movwf   DAYS
+                      00721 
+022B   30AE           00722                                 movlw   dow-1                                   ; prompt user for data (
+                            month)
+022C   2364           00723                                 call    RSPrint
+022D   2265           00724                                 call    RSReadBCD
+                      00725                         ;       movlw   02
+022E   00C6           00726                                 movwf   DOW
+                      00727 
+022F   30DB           00728                                 movlw   hour-1                                  ; prompt user for data (
+                            month)
+0230   2364           00729                                 call    RSPrint
+0231   2265           00730                                 call    RSReadBCD
+                      00731                         ;       movlw   09
+0232   00C8           00732                                 movwf   HRS
+                      00733 
+0233   30EA           00734                                 movlw   minute-1                                        ; prompt user fo
+                            r data (month)
+0234   2364           00735                                 call    RSPrint
+0235   2265           00736                                 call    RSReadBCD
+                      00737                         ;       movlw   0x52
+0236   00C9           00738                                 movwf   MINS
+                      00739 
+0237   3000           00740                                 movlw   0                                               ;force seconds t
+                            o zero
+0238   00CA           00741                                 movwf   SECS
+                      00742 
+0239   22C0           00743                                 call    RTC_brst_wr                             ; now write data to RTC
+                      00744 
+023A   29F5           00745                                 goto    ATWREnd                                 ;jump back to the end of
+                             settings
+                      00746 #endif                          
+                      00747 ;-----------------------------------------------------------------------------
+                      00748 ;   Transmit byte in W register from USART if ATE1 is Echo On
+                      00749 ;   This routine returns in bank0
+                      00750 ;-----------------------------------------------------------------------------
+                      00751 
+023B   1832           00752 RSEcho:                 btfsc   MODEM_STATUS,0                  ;if Echo Off, no send
+023C   225F           00753                                 call    RSSend
+                      00754 
+023D   0008           00755                         return
+                      00756 
+                      00757 ;-----------------------------------------------------------------------------
+                      00758 ;Set the port B with B7/B6 as output
+                      00759 ;Routine is only called once and can be placed in-line saving a call and return
+                      00760 ;This routine returns in bank0
+                      00761 ;-----------------------------------------------------------------------------
+                      00762 
+023E                  00763 InitPortB:
+                      00764                 Bank1
+023E   1683               M                 bsf     STATUS,RP0
+023F   1303               M                 bcf     STATUS,RP1
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 22
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+0240   303F           00765                 movlw   0x3F                            ;b0011.1111
+0241   0086           00766                 movwf   TRISB
+                      00767 
+                      00768                 Bank0
+0242   1283               M                 bcf     STATUS,RP0
+0243   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+0244   0008           00769                                 return
+                      00770 
+                      00771 ;---------------------------------------------------------------------------------------------
+                      00772 ;                                        USART routines                                
+                      00773 ;---------------------------------------------------------------------------------------------
+                      00774 
+                      00775 ;-----------------------------------------------------------------------------
+                      00776 ;Set up USART for asynchronous comms
+                      00777 ;Routine is only called once and can be placed in-line saving a call and return
+                      00778 ;This routine returns in bank0
+                      00779 ;-----------------------------------------------------------------------------
+                      00780 
+0245                  00781 RSSetup:        
+0245   3019           00782                                 movlw   BAUD_9600                       ;set baud rate 9600 for 4Mhz clo
+                            ck
+                      00783 
+                      00784                         Bank1                                   ;change from bank0 to bank1
+0246   1683               M                 bsf     STATUS,RP0
+0247   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+0248   0099           00785                         movwf   SPBRG
+0249   1518           00786                         bsf         TXSTA,BRGH              ;baud rate high speed option
+024A   1698           00787                         bsf         TXSTA,TXEN              ;enable transmission
+                      00788 
+                      00789                         Bank0                                   ;change from bank1 to bank0
+024B   1283               M                 bcf     STATUS,RP0
+024C   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+024D   1618           00790                         bsf         RCSTA,CREN              ;enable reception
+024E   1798           00791                         bsf         RCSTA,SPEN              ;enable serial port
+                      00792 
+024F   0008           00793                         return
+                      00794 
+                      00795 ;-----------------------------------------------------------------------------
+                      00796 ;   Wait for byte to be received in USART and return with byte in W
+                      00797 ;   This routine returns in bank0
+                      00798 ;-----------------------------------------------------------------------------
+                      00799 
+0250                  00800 RSWaitRecv:     
+                      00801                 Bank0                                   ;change from unknown bank to bank0
+0250   1283               M                 bcf     STATUS,RP0
+0251   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+0252   1E8C           00802                         btfss   PIR1,RCIF                   ;check if data received
+0253   2A52           00803                         goto    $-1                             ;wait until new data
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 23
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0254   081A           00804                         movf    RCREG,W                     ;get received data into W
+0255   0008           00805                         return
+                      00806 
+                      00807 ;-----------------------------------------------------------------------------
+                      00808 ;   Check if a byte is available from USART and return with byte in W
+                      00809 ;       Set Z = 0 if a byte is ready, Z = 1 if nothing
+                      00810 ;   This routine returns in bank0
+                      00811 ;-----------------------------------------------------------------------------
+                      00812 
+0256                  00813 RSRecv: 
+                      00814                 Bank0                                   ;change from unknown bank to bank0
+0256   1283               M                 bcf     STATUS,RP0
+0257   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+0258   1E8C           00815                         btfss   PIR1,RCIF                   ;check if data received
+0259   2A5D           00816                         goto    EndRSRecv                               ;nothing, exit
+                      00817 
+025A   081A           00818                         movf    RCREG,W                     ;get received data into W
+025B   1103           00819                                 bcf             STATUS,Z                                ;set Z=0 for new
+                             byte received
+025C   0008           00820                                 return
+                      00821 
+025D   1503           00822 EndRSRecv:              bsf             STATUS,Z                                ;set Z=1 for nothing rec
+                            eive
+025E   0008           00823                         return
+                      00824 
+                      00825 ;-----------------------------------------------------------------------------
+                      00826 ;   Transmit byte in W register from USART
+                      00827 ;   This routine returns in bank0
+                      00828 ;-----------------------------------------------------------------------------
+                      00829 
+025F                  00830 RSSend: 
+                      00831                                 #ifdef  TOBURN
+                      00832                 Bank0                                   ;change from unknown bank to bank0
+025F   1283               M                 bcf     STATUS,RP0
+0260   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+0261   1E0C           00833                         btfss   PIR1,TXIF                       ;check that buffer is empty
+0262   2A61           00834                         goto    $-1
+0263   0099           00835                         movwf   TXREG                           ;transmit byte
+                      00836                                 #endif
+                      00837 
+0264   0008           00838                         return
+                      00839 
+                      00840 ;---------------------------------------------------------------------------------------------
+                      00841 ;                              character conversion routines                                
+                      00842 ;---------------------------------------------------------------------------------------------
+                      00843 
+                      00844 ;-----------------------------------------------------------------------------
+                      00845 ;       Read one or two characters on UART. Ex: 15 and store it in W = 0x0F
+                      00846 ;       Result is in W
+                      00847 ;-----------------------------------------------------------------------------
+                      00848 
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 24
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00849 #ifdef  NOT_USED        ;DS1307_INCLUDED
+                      00850 RSReadNumber:
+                      00851                                 call    RSWaitRecv                              ; get the first digit
+                      00852                                 call    RSEcho                                  
+                      00853                                                                                                 
+                      00854                                 addlw   -30h                                    ; subtract ASCII offset
+                      00855                                 movwf   TMP                                             ; TMP used for u
+                            nite
+                      00856                                 
+                      00857                                 call    RSWaitRecv                              ; wait for a second digi
+                            t or CR
+                      00858                                 call    RSEcho                                  ; echo to screen
+                      00859                                 xorlw   0dh                                             ; if cr, Z will 
+                            be set
+                      00860                                 btfss   STATUS,Z                                ; skip if clear
+                      00861                                 goto    bcd1                                            ; go to bcd if Z
+                             = 0
+                      00862                                 movf    TMP,w
+                      00863                                 return
+                      00864 
+                      00865 bcd1:                   xorlw   0dh
+                      00866                                 addlw   -30h                                    ; subtract ASCII offset
+                      00867                                 movwf   SCRATCH
+                      00868                                 movf    TMP,w
+                      00869                                 movwf   TMP2                                    ; TMP2 used for dizaine
+                      00870                                 movf    SCRATCH,w
+                      00871                                 movwf   TMP
+                      00872 
+                      00873                                 clrw                                                    ; inc the dizain
+                            e x 10
+                      00874                                 addlw   0x0A
+                      00875                                 decfsz  TMP2,f
+                      00876                                 goto    $-2
+                      00877 
+                      00878                                 addwf   TMP,f                                   ; and add the unite valu
+                            e
+                      00879                                 movf    TMP,w
+                      00880                                 return
+                      00881 #endif
+                      00882 ;-----------------------------------------------------------------------------
+                      00883 ;       Read one or two characters on UART. Ex: 15 and store it in W = 0x15 (BCD)
+                      00884 ;       Result is in W
+                      00885 ;-----------------------------------------------------------------------------
+                      00886 
+                      00887 #ifdef  DS1307_INCLUDED
+0265                  00888 RSReadBCD:      
+0265   2250           00889                                 call    RSWaitRecv                              ; get the first digit
+0266   223B           00890                                 call    RSEcho                                  
+                      00891                                                                                                 
+0267   3ED0           00892                                 addlw   -30h                                    ; subtract ASCII offset
+0268   00C1           00893                                 movwf   TMP
+                      00894                                 
+0269   2250           00895                                 call    RSWaitRecv                              ; wait for a second digi
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 25
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                            t or CR
+026A   223B           00896                                 call    RSEcho                                  ; echo to screen
+026B   3A0D           00897                                 xorlw   0dh                                             ; if cr, Z will 
+                            be set
+026C   1D03           00898                                 btfss   STATUS,Z                                ; skip if clear
+026D   2A70           00899                                 goto    bcd2                                    ; go to bcd if Z = 0
+026E   0841           00900                                 movf    TMP,w
+026F   0008           00901                                 return
+                      00902 
+0270   3A0D           00903 bcd2:                   xorlw   0dh
+0271   3ED0           00904                                 addlw   -30h                                    ; subtract ASCII offset
+0272   00C0           00905                                 movwf   SCRATCH
+0273   0EC1           00906                                 swapf   TMP,f
+0274   0841           00907                                 movf    TMP,w
+0275   0440           00908                                 iorwf   SCRATCH,w
+0276   0008           00909                                 return
+                      00910 #endif
+                      00911 
+                      00912 ;-----------------------------------------------------------------------------
+                      00913 ;       Send on UART the BCD value in W
+                      00914 ;       W contents the value to and is destroy
+                      00915 ;-----------------------------------------------------------------------------
+                      00916 
+                      00917 #ifdef  DS1307_INCLUDED
+0277                  00918 RSWriteBCD:
+0277   00C1           00919                                 movwf   TMP                             ; save W
+0278   0E41           00920                                 swapf   TMP,W                   ; swap nibbles
+0279   390F           00921                                 andlw   0x0f                    ; clear bits 4 to 7
+027A   3E06           00922                                 addlw   0x06                    ; add 6
+027B   1C83           00923                                 btfss   STATUS,DC               ; if a-f, DC = 1
+027C   2A7F           00924                                 goto    lessnine                        ; if DC = 0, < 9, so go to lessn
+                            ine
+027D   3E31           00925                                 addlw   0x31                    ; add 31h to make ASCII
+027E   2A80           00926                                 goto    digit1                  ; skip to output
+027F                  00927 lessnine:
+027F   3E2A           00928                                 addlw   0x2a                    ; add offset for bits 0 to 9 to make ASC
+                            II
+0280                  00929 digit1:
+0280   225F           00930                                 call    RSSend                  ; print char
+0281   0841           00931                                 movf    TMP,W                   ; restore W
+0282   390F           00932                                 andlw   0x0f                    ; clear bits 4 to-7
+0283   3E06           00933                                 addlw   0x06                    ; add 6
+0284   1C83           00934                                 btfss   STATUS,DC               ; if a-f, DC = 1
+0285   2A88           00935                                 goto    lessnine2               ; if DC = 0, < 9, so go to lessnine2
+0286   3E31           00936                                 addlw   0x31                    ; add 31h to make ASCII
+0287   2A89           00937                                 goto    digit2                  ; skip to output
+0288                  00938 lessnine2:
+0288   3E2A           00939                                 addlw   0x2a                    ; add offset for bits 0-to 9  to make AS
+                            CII
+0289                  00940 digit2:
+0289   225F           00941                                 call    RSSend                  ; print char
+                      00942 
+028A   0008           00943                                 return
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 26
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00944 #endif
+                      00945 ;---------------------------------------------------------------------------------------------
+                      00946 ;                                 RTC DS10307/I2C routines                                
+                      00947 ;---------------------------------------------------------------------------------------------
+                      00948 
+                      00949 #ifdef  DS1307_INCLUDED
+028B                  00950 RTC_brst_rd:
+                      00951                                 ANY_I2C_START
+028B   1605               M                 bsf     SDA                                             ; SDA high
+028C   0000               M                 nop
+                          M                 Bank1           
+028D   1683               M                 bsf     STATUS,RP0
+028E   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+028F   1485               M                 bsf     TRISA, 1                                ; SCL high (input)              
+                          M                 Bank0
+0290   1283               M                 bcf     STATUS,RP0
+0291   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+0292   1205               M                 bcf     SDA                                             ; SDA low (start)
+0293   30D0           00952                                 movlw   0D0h                    ; slave address + write
+0294   232B           00953                                 call    write_RTC
+0295   3000           00954                                 movlw   0                       ; set word address to seconds register
+0296   232B           00955                                 call    write_RTC
+                      00956                                 ANY_I2C_START
+0297   1605               M                 bsf     SDA                                             ; SDA high
+0298   0000               M                 nop
+                          M                 Bank1           
+0299   1683               M                 bsf     STATUS,RP0
+029A   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+029B   1485               M                 bsf     TRISA, 1                                ; SCL high (input)              
+                          M                 Bank0
+029C   1283               M                 bcf     STATUS,RP0
+029D   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+029E   1205               M                 bcf     SDA                                             ; SDA low (start)
+029F   30D1           00957                                 movlw   0D1h                    ; slave address + read
+02A0   232B           00958                                 call    write_RTC
+02A1   22E4           00959                                 call    read_RTC                ; read the seconds data
+02A2   00CA           00960                                 movwf   SECS                    ; save it
+02A3   2306           00961                                 call    ack;
+02A4   22E4           00962                                 call    read_RTC                ; and so on
+02A5   00C9           00963                                 movwf   MINS
+02A6   2306           00964                                 call    ack;
+02A7   22E4           00965                                 call    read_RTC
+02A8   00C8           00966                                 movwf   HRS
+02A9   2306           00967                                 call    ack;
+02AA   22E4           00968                                 call    read_RTC
+02AB   00C6           00969                                 movwf   DOW
+02AC   2306           00970                                 call    ack;
+02AD   22E4           00971                                 call    read_RTC
+02AE   00C7           00972                                 movwf   DAYS
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 27
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+02AF   2306           00973                                 call    ack;
+02B0   22E4           00974                                 call    read_RTC
+02B1   00C5           00975                                 movwf   MON
+02B2   2306           00976                                 call    ack;
+02B3   22E4           00977                                 call    read_RTC
+02B4   00C4           00978                                 movwf   YRS
+02B5   2319           00979                                 call    nack;
+                      00980                                 ANY_I2C_STOP
+02B6   1205               M                 bcf     SDA                                             ; SDA low
+02B7   0000               M                 nop
+02B8   0000               M                 nop
+                          M                 Bank1
+02B9   1683               M                 bsf     STATUS,RP0
+02BA   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+02BB   1485               M                 bsf     TRISA, 1                                ; SCL high (input)
+                          M                 Bank0
+02BC   1283               M                 bcf     STATUS,RP0
+02BD   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+02BE   1605               M                 bsf     SDA                                             ; SDA high
+02BF   0008           00981                                 return
+                      00982 
+02C0                  00983 RTC_brst_wr:
+                      00984                                 ANY_I2C_START
+02C0   1605               M                 bsf     SDA                                             ; SDA high
+02C1   0000               M                 nop
+                          M                 Bank1           
+02C2   1683               M                 bsf     STATUS,RP0
+02C3   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+02C4   1485               M                 bsf     TRISA, 1                                ; SCL high (input)              
+                          M                 Bank0
+02C5   1283               M                 bcf     STATUS,RP0
+02C6   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+02C7   1205               M                 bcf     SDA                                             ; SDA low (start)
+02C8   30D0           00985                                 movlw   0D0h                    ; slave address + write
+02C9   232B           00986                                 call    write_RTC
+02CA   3000           00987                                 movlw   0                       ; set word address to seconds register
+02CB   232B           00988                                 call    write_RTC
+02CC   084A           00989                                 movf    SECS, W
+02CD   232B           00990                                 call    write_RTC
+02CE   0849           00991                                 movf    MINS, W
+02CF   232B           00992                                 call    write_RTC
+02D0   0848           00993                                 movf    HRS, W
+02D1   232B           00994                                 call    write_RTC
+02D2   0846           00995                                 movf    DOW, W
+02D3   232B           00996                                 call    write_RTC
+02D4   0847           00997                                 movf    DAYS, W
+02D5   232B           00998                                 call    write_RTC
+02D6   0845           00999                                 movf    MON, W
+02D7   232B           01000                                 call    write_RTC
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 28
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+02D8   0844           01001                                 movf    YRS, W
+02D9   232B           01002                                 call    write_RTC
+                      01003                                 ANY_I2C_STOP
+02DA   1205               M                 bcf     SDA                                             ; SDA low
+02DB   0000               M                 nop
+02DC   0000               M                 nop
+                          M                 Bank1
+02DD   1683               M                 bsf     STATUS,RP0
+02DE   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+02DF   1485               M                 bsf     TRISA, 1                                ; SCL high (input)
+                          M                 Bank0
+02E0   1283               M                 bcf     STATUS,RP0
+02E1   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+02E2   1605               M                 bsf     SDA                                             ; SDA high
+                      01004 
+02E3   0008           01005                                 return
+                      01006 
+                      01007 ;---- Read RTC into W  ----
+02E4                  01008 read_RTC:
+                      01009                                 Bank1
+02E4   1683               M                 bsf     STATUS,RP0
+02E5   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+02E6   1605           01010                                 bsf             TRISA,4         ; set SDA for input
+                      01011                                 Bank0
+02E7   1283               M                 bcf     STATUS,RP0
+02E8   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+                      01012 
+02E9   3008           01013                                 movlw   08h                     ; send 8 bits
+02EA   00C3           01014                                 movwf   COUNT
+                      01015 
+02EB   1085           01016                                 bcf             SCL                     ; clock data out
+                      01017                                 Bank1
+02EC   1683               M                 bsf     STATUS,RP0
+02ED   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+02EE   1085           01018                                 bcf     TRISA, 1                ; SCL low (output)
+                      01019                                 Bank0
+02EF   1283               M                 bcf     STATUS,RP0
+02F0   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+                      01020 
+02F1   01C1           01021                                 clrf    TMP                     ; clear var
+02F2   0DC1           01022                                 rlf             TMP, 1                  ; rotate carry in
+02F3   01C1           01023                                 clrf    TMP                     ; clear var again
+                      01024 
+02F4                  01025 I2C_read_loop:
+02F4   0DC1           01026                                 rlf     TMP, 1
+                      01027 
+                      01028                                 Bank1
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 29
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+02F5   1683               M                 bsf     STATUS,RP0
+02F6   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+02F7   1485           01029                                 bsf             TRISA, 1                ; SCL high (input)
+                      01030                                 Bank0
+02F8   1283               M                 bcf     STATUS,RP0
+02F9   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+                      01031 
+02FA   1A05           01032                                 btfsc   SDA
+02FB   1441           01033                                 bsf             TMP, 0                  ; if data out = 1, set bit
+                      01034 
+02FC   1085           01035                                 bcf             SCL
+                      01036                                 Bank1
+02FD   1683               M                 bsf     STATUS,RP0
+02FE   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+02FF   1085           01037                                 bcf             TRISA, 1                ; SCL low (output)
+                      01038                                 Bank0
+0300   1283               M                 bcf     STATUS,RP0
+0301   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+0302   0BC3           01039                                 decfsz  COUNT, 1
+0303   2AF4           01040                                 goto    I2C_read_loop
+                      01041 
+0304   0841           01042                                 movf    TMP, W
+                      01043 
+0305   0008           01044                                 return
+                      01045 
+                      01046 ;---- ACK read (assumes SCL=0 on entry) ----
+0306                  01047 ack:
+0306   1205           01048                                 bcf             SDA
+                      01049 
+                      01050                                 Bank1
+0307   1683               M                 bsf     STATUS,RP0
+0308   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+0309   1205           01051                                 bcf             TRISA,4         ; set SDA for output
+                      01052                                 Bank0
+030A   1283               M                 bcf     STATUS,RP0
+030B   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+                      01053 
+                      01054                                 Bank1
+030C   1683               M                 bsf     STATUS,RP0
+030D   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+030E   1485           01055                                 bsf             TRISA, 1                ; SCL high (input)
+                      01056                                 Bank0
+030F   1283               M                 bcf     STATUS,RP0
+0310   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+0311   0000           01057                                 nop
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 30
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0312   1085           01058                                 bcf     SCL
+                      01059                                 Bank1
+0313   1683               M                 bsf     STATUS,RP0
+0314   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+0315   1085           01060                                 bcf             TRISA, 1                ; SCL low (output)
+                      01061                                 Bank0
+0316   1283               M                 bcf     STATUS,RP0
+0317   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+                      01062 
+0318   0008           01063                                 return
+                      01064 
+                      01065 ;---- NACK read (assumes SCL = 0 on entry) ----
+0319                  01066 nack:
+0319   1605           01067                                 bsf     SDA
+                      01068 
+                      01069                                 Bank1
+031A   1683               M                 bsf     STATUS,RP0
+031B   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+031C   1205           01070                                 bcf             TRISA,4         ; set SDA for output
+                      01071                                 Bank0
+031D   1283               M                 bcf     STATUS,RP0
+031E   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+                      01072 
+                      01073                                 Bank1
+031F   1683               M                 bsf     STATUS,RP0
+0320   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+0321   1485           01074                                 bsf             TRISA, 1                ; SCL high (input)
+                      01075                                 Bank0
+0322   1283               M                 bcf     STATUS,RP0
+0323   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+                      01076 
+0324   1085           01077                                 bcf     SCL
+                      01078                                 Bank1
+0325   1683               M                 bsf     STATUS,RP0
+0326   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+0327   1085           01079                                 bcf             TRISA, 1                ; SCL low (output)
+                      01080                                 Bank0
+0328   1283               M                 bcf     STATUS,RP0
+0329   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+                      01081 
+032A   0008           01082                                 return
+                      01083 
+                      01084 ;--- Write the byte in W to RTC ---
+                      01085 ;---- assumes CE is asserted ----
+032B                  01086 write_RTC:
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 31
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+032B   00C1           01087                                 movwf   TMP                     ;Save the data
+                      01088 ;
+                      01089 ;--- Do a I2C bus write of byte in 'TMP' ---
+                      01090 ;
+032C                  01091 I2C_write:
+                      01092 
+                      01093                                 Bank1
+032C   1683               M                 bsf     STATUS,RP0
+032D   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+032E   1205           01094                                 bcf             TRISA, 4                ; set SDA for output
+                      01095                                 Bank0
+032F   1283               M                 bcf     STATUS,RP0
+0330   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+                      01096 
+0331   3008           01097                                 movlw   08h                     ; send 8 bits
+0332   00C3           01098                                 movwf   COUNT
+                      01099 
+0333   1085           01100                                 bcf             SCL
+                      01101                                 Bank1
+0334   1683               M                 bsf     STATUS,RP0
+0335   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+0336   1085           01102                                 bcf             TRISA, 1                ; SCL low (output)
+                      01103                                 Bank0
+0337   1283               M                 bcf     STATUS,RP0
+0338   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+                      01104 
+0339                  01105 I2C_w_loop:
+0339   1205           01106                                 bcf             SDA                     ; assume data out is low
+033A   1BC1           01107                                 btfsc   TMP, 7
+033B   1605           01108                                 bsf             SDA                     ; if data out = 1, set bit
+                      01109                                 ; nop
+                      01110 
+                      01111                                 Bank1
+033C   1683               M                 bsf     STATUS,RP0
+033D   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+033E   1485           01112                                 bsf             TRISA, 1                ; SCL high (input)
+                      01113                                 Bank0
+033F   1283               M                 bcf     STATUS,RP0
+0340   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+0341   0DC1           01114                                 rlf             TMP, 1
+0342   1085           01115                                 bcf             SCL                     ; clock it in
+                      01116                                 Bank1
+0343   1683               M                 bsf     STATUS,RP0
+0344   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+0345   1085           01117                                 bcf             TRISA, 1                ; SCL low (output)
+                      01118                                 Bank0
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 32
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0346   1283               M                 bcf     STATUS,RP0
+0347   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+0348   0BC3           01119                                 decfsz  COUNT, 1
+0349   2B39           01120                                 goto    I2C_w_loop
+                      01121 
+                      01122                                 Bank1
+034A   1683               M                 bsf     STATUS,RP0
+034B   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+034C   1605           01123                                 bsf             TRISA,4         ; set SDA for input
+                      01124                                 Bank0
+034D   1283               M                 bcf     STATUS,RP0
+034E   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+                      01125 
+034F   1085           01126                                 bcf             SCL
+                      01127                                 Bank1
+0350   1683               M                 bsf     STATUS,RP0
+0351   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+0352   1085           01128                                 bcf             TRISA, 1                ; SCL low (output)
+                      01129                                 Bank0
+0353   1283               M                 bcf     STATUS,RP0
+0354   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+                      01130                                 ; nop
+                      01131                                 Bank1
+0355   1683               M                 bsf     STATUS,RP0
+0356   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+0357   1485           01132                                 bsf             TRISA, 1                ; SCL high (input)
+                      01133                                 Bank0
+0358   1283               M                 bcf     STATUS,RP0
+0359   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+                      01134                                 ; if(sda) printf("Ack bit missing  %02X\n",(unsigned int)d);
+035A   1085           01135                                 bcf             SCL
+                      01136                                 Bank1
+035B   1683               M                 bsf     STATUS,RP0
+035C   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel -302                         ;Suppress 'Messages' in compiler output
+035D   1085           01137                                 bcf             TRISA, 1                ; SCL low (output)
+                      01138                                 Bank0
+035E   1283               M                 bcf     STATUS,RP0
+035F   1303               M                 bcf     STATUS,RP1
+                          M                 errorlevel +302                         ;Restore 'Messages' in compiler output  
+                      01139 
+0360   0008           01140                                 return
+                      01141 #endif
+                      01142 ;-----------------------------------------------------------------------------
+                      01143 ;-- pclsub used for indirect addressing --
+                      01144 ;-----------------------------------------
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 33
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0361                  01145 pclsub:
+0361   0AC0           01146                                 incf   SCRATCH,F                                ; advance table pointer
+0362   0840           01147                                 movf   SCRATCH,W                                ; move table pointer to 
+                            W
+0363   0082           01148                                 movwf  PCL                                              ; jump to addres
+                            s pointed by PCLATH,W
+                      01149 
+                      01150 ;-----------------------------------------------------------------------------
+                      01151 ;       Print a string to USART
+                      01152 ;       W contents the string adresse
+                      01153 ;-----------------------------------------------------------------------------
+                      01154 
+0364                  01155 RSPrint:
+0364   00C0           01156                                 movwf   SCRATCH                                 ; FSR = string address
+0365                  01157 GoWrite:
+0365   2361           01158                                 call    pclsub                                  ; advance pointer and re
+                            ad pointed byte
+0366   3E00           01159                                 addlw   0h                                              ; if contents ar
+                            e zero, Z will be set
+0367   1903           01160                                 btfsc   STATUS,Z                                ; skip if clear
+0368   0008           01161                                 return                                                  ; current charac
+                            ter is null: end of string
+0369   225F           01162                                 call    RSSend                                  ; print one character
+036A   2B65           01163                                 goto    GoWrite                                 ; loop
+                      01164 
+                      01165 ;-----------------------------------------------------------------------------
+                      01166 
+                      01167                 END
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 34
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+ACKDT                             00000005
+ACKEN                             00000004
+ACKSTAT                           00000006
+ADCON0                            0000001F
+ADCON1                            0000009F
+ADCS0                             00000006
+ADCS1                             00000007
+ADDEN                             00000003
+ADFM                              00000007
+ADIE                              00000006
+ADIF                              00000006
+ADON                              00000000
+ADRESH                            0000001E
+ADRESL                            0000009E
+ANY_I2C_START                     
+ANY_I2C_STOP                      
+ATCMGLfailed                      0000018B
+ATCMGSfailed                      000001B3
+ATE0                              000001BF
+ATEfailed                         000001C9
+ATOK                              0000013D
+ATRDfailed                        000001E8
+ATVfailed                         000001D9
+ATWREnd                           000001F5
+ATWRfailed                        000001F7
+AnEnd                             0000015E
+AnErr                             0000013A
+AnExit                            0000016B
+AnOk                              0000015C
+Analyse                           0000012B
+BAUD_7812_5                       0000001F
+BAUD_9600                         00000019
+BCLIE                             00000003
+BCLIF                             00000003
+BF                                00000000
+BRGH                              00000002
+Bank0                             
+Bank1                             
+Bank2                             
+Bank3                             
+C                                 00000000
+CARRIAGE_RETURN                   0000000D
+CCP1CON                           00000017
+CCP1IE                            00000002
+CCP1IF                            00000002
+CCP1M0                            00000000
+CCP1M1                            00000001
+CCP1M2                            00000002
+CCP1M3                            00000003
+CCP1X                             00000005
+CCP1Y                             00000004
+CCP2CON                           0000001D
+CCP2IE                            00000000
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 35
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+CCP2IF                            00000000
+CCP2M0                            00000000
+CCP2M1                            00000001
+CCP2M2                            00000002
+CCP2M3                            00000003
+CCP2X                             00000005
+CCP2Y                             00000004
+CCPR1                             00000015
+CCPR1H                            00000016
+CCPR1L                            00000015
+CCPR2                             0000001B
+CCPR2H                            0000001C
+CCPR2L                            0000001B
+CHS0                              00000003
+CHS1                              00000004
+CHS2                              00000005
+CKE                               00000006
+CKP                               00000004
+CMGLRes                           00000036
+CMGSRes                           00000027
+COUNT                             00000043
+CREN                              00000004
+CSRC                              00000007
+CTRLZ                             0000001A
+CheckIfATE                        000001B5
+CheckIfATRD                       000001DB
+CheckIfATV                        000001CB
+CheckIfATWR                       000001EA
+CheckIfCMGL                       0000016E
+CheckIfCMGS                       0000018D
+CleanBuf                          00000160
+D                                 00000005
+DATA_ADDRESS                      00000005
+DAYS                              00000047
+DC                                00000001
+DOW                               00000046
+DS1307_INCLUDED                   1
+D_A                               00000005
+D_NOT_A                           00000005
+Delay                             
+EEADR                             0000010D
+EEADRH                            0000010F
+EECON1                            0000018C
+EECON2                            0000018D
+EEDATA                            0000010C
+EEDATH                            0000010E
+EEIE                              00000004
+EEIF                              00000004
+EEPGD                             00000007
+EndRSRecv                         0000025D
+ExecRDClock                       000001F9
+ExecWRClock                       0000021F
+F                                 00000001
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 36
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+FERR                              00000002
+FSR                               00000004
+GCEN                              00000007
+GIE                               00000007
+GO                                00000002
+GO_DONE                           00000002
+GO_NOT_DONE                       00000002
+GoWrite                           00000365
+HRS                               00000048
+I2C_DATA                          00000005
+I2C_READ                          00000002
+I2C_START                         00000003
+I2C_STOP                          00000004
+I2C_read_loop                     000002F4
+I2C_w_loop                        00000339
+I2C_write                         0000032C
+INDF                              00000000
+INTCON                            0000000B
+INTE                              00000004
+INTEDG                            00000006
+INTERMASK                         000000A0
+INTF                              00000001
+IRP                               00000007
+ISITATE1                          000001C2
+InitPortB                         0000023E
+IntEnd                            0000000E
+JUMPER4                           00000004
+JUMPER5                           00000005
+LEDGREEN                          00000006
+LEDYELLOW                         00000007
+LINE_FEED                         0000000A
+MINS                              00000049
+MODEM_STATUS                      00000032
+MON                               00000045
+Main                              0000010F
+NOT_A                             00000005
+NOT_ADDRESS                       00000005
+NOT_BO                            00000000
+NOT_BOR                           00000000
+NOT_DONE                          00000002
+NOT_PD                            00000003
+NOT_POR                           00000001
+NOT_RBPU                          00000007
+NOT_RC8                           00000006
+NOT_T1SYNC                        00000002
+NOT_TO                            00000004
+NOT_TX8                           00000006
+NOT_W                             00000002
+NOT_WRITE                         00000002
+Next                              00000117
+OERR                              00000001
+OPTIONVAL                         00000087
+OPTION_REG                        00000081
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 37
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+P                                 00000004
+PCFG0                             00000000
+PCFG1                             00000001
+PCFG2                             00000002
+PCFG3                             00000003
+PCL                               00000002
+PCLATH                            0000000A
+PCON                              0000008E
+PEIE                              00000006
+PEN                               00000002
+PIE1                              0000008C
+PIE2                              0000008D
+PIR1                              0000000C
+PIR2                              0000000D
+PORTA                             00000005
+PORTB                             00000006
+PORTC                             00000007
+PR2                               00000092
+PS0                               00000000
+PS1                               00000001
+PS2                               00000002
+PSA                               00000003
+R                                 00000002
+RA0                               00000000
+RA1                               00000001
+RA2                               00000002
+RA3                               00000003
+RA4                               00000004
+RA5                               00000005
+RB0                               00000000
+RB1                               00000001
+RB2                               00000002
+RB3                               00000003
+RB4                               00000004
+RB5                               00000005
+RB6                               00000006
+RB7                               00000007
+RBIE                              00000003
+RBIF                              00000000
+RC0                               00000000
+RC1                               00000001
+RC2                               00000002
+RC3                               00000003
+RC4                               00000004
+RC5                               00000005
+RC6                               00000006
+RC7                               00000007
+RC8_9                             00000006
+RC9                               00000006
+RCD8                              00000000
+RCEN                              00000003
+RCIE                              00000005
+RCIF                              00000005
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 38
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+RCREG                             0000001A
+RCSTA                             00000018
+RD                                00000000
+READ_WRITE                        00000002
+RP0                               00000005
+RP1                               00000006
+RSBufEnd                          00000030
+RSBufIndex                        00000020
+RSBufStart                        00000021
+RSCharRec                         00000031
+RSEN                              00000001
+RSEcho                            0000023B
+RSPrint                           00000364
+RSReadBCD                         00000265
+RSRecv                            00000256
+RSSend                            0000025F
+RSSetup                           00000245
+RSWaitRecv                        00000250
+RSWriteBCD                        00000277
+RTC_brst_rd                       0000028B
+RTC_brst_wr                       000002C0
+RX9                               00000006
+RX9D                              00000000
+R_NOT_W                           00000002
+R_W                               00000002
+S                                 00000003
+SCL                               PORTA,1
+SCRATCH                           00000040
+SDA                               PORTA,4
+SECS                              0000004A
+SEN                               00000000
+SMP                               00000007
+SMSTextLoop                       000001A8
+SPBRG                             00000099
+SPEN                              00000007
+SREN                              00000005
+SSPADD                            00000093
+SSPBUF                            00000013
+SSPCON                            00000014
+SSPCON2                           00000091
+SSPEN                             00000005
+SSPIE                             00000003
+SSPIF                             00000003
+SSPM0                             00000000
+SSPM1                             00000001
+SSPM2                             00000002
+SSPM3                             00000003
+SSPOV                             00000006
+SSPSTAT                           00000094
+STATUS                            00000003
+SYNC                              00000004
+Start                             00000000
+Startup                           000000FC
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 39
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+Store                             0000011F
+T0CS                              00000005
+T0IE                              00000005
+T0IF                              00000002
+T0SE                              00000004
+T1CKPS0                           00000004
+T1CKPS1                           00000005
+T1CON                             00000010
+T1INSYNC                          00000002
+T1OSCEN                           00000003
+T1SYNC                            00000002
+T2CKPS0                           00000000
+T2CKPS1                           00000001
+T2CON                             00000012
+TMP                               00000041
+TMP2                              00000042
+TMR0                              00000001
+TMR0IE                            00000005
+TMR0IF                            00000002
+TMR1                              0000000E
+TMR1CS                            00000001
+TMR1H                             0000000F
+TMR1IE                            00000000
+TMR1IF                            00000000
+TMR1L                             0000000E
+TMR1ON                            00000000
+TMR2                              00000011
+TMR2IE                            00000001
+TMR2IF                            00000001
+TMR2ON                            00000002
+TOBURN                            1
+TOUTPS0                           00000003
+TOUTPS1                           00000004
+TOUTPS2                           00000005
+TOUTPS3                           00000006
+TRISA                             00000085
+TRISA0                            00000000
+TRISA1                            00000001
+TRISA2                            00000002
+TRISA3                            00000003
+TRISA4                            00000004
+TRISA5                            00000005
+TRISB                             00000086
+TRISB0                            00000000
+TRISB1                            00000001
+TRISB2                            00000002
+TRISB3                            00000003
+TRISB4                            00000004
+TRISB5                            00000005
+TRISB6                            00000006
+TRISB7                            00000007
+TRISC                             00000087
+TRISC0                            00000000
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 40
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+TRISC1                            00000001
+TRISC2                            00000002
+TRISC3                            00000003
+TRISC4                            00000004
+TRISC5                            00000005
+TRISC6                            00000006
+TRISC7                            00000007
+TRMT                              00000001
+TX8_9                             00000006
+TX9                               00000006
+TX9D                              00000000
+TXD8                              00000000
+TXEN                              00000005
+TXError                           0000007F
+TXIE                              00000004
+TXIF                              00000004
+TXOk                              00000089
+TXREG                             00000019
+TXSTA                             00000098
+TimerCount                        00000072
+UA                                00000001
+W                                 00000000
+WCOL                              00000007
+WR                                00000001
+WREN                              00000002
+WRERR                             00000003
+YRS                               00000044
+Z                                 00000002
+_BODEN_OFF                        00003FBF
+_BODEN_ON                         00003FFF
+_BOREN_OFF                        00003FBF
+_BOREN_ON                         00003FFF
+_CONFIG                           00002007
+_CPD_OFF                          00003FFF
+_CPD_ON                           00003EFF
+_CP_ALL                           00000FCF
+_CP_HALF                          00001FDF
+_CP_OFF                           00003FFF
+_CP_UPPER_256                     00002FEF
+_DEBUG_OFF                        00003FFF
+_DEBUG_ON                         000037FF
+_DEVID1                           00002006
+_FOSC_EXTRC                       00003FFF
+_FOSC_HS                          00003FFE
+_FOSC_LP                          00003FFC
+_FOSC_XT                          00003FFD
+_HS_OSC                           00003FFE
+_IDLOC0                           00002000
+_IDLOC1                           00002001
+_IDLOC2                           00002002
+_IDLOC3                           00002003
+_LP_OSC                           00003FFC
+_LVP_OFF                          00003F7F
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 41
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+_LVP_ON                           00003FFF
+_PWRTE_OFF                        00003FFF
+_PWRTE_ON                         00003FF7
+_RC_OSC                           00003FFF
+_WDTE_OFF                         00003FFB
+_WDTE_ON                          00003FFF
+_WDT_OFF                          00003FFB
+_WDT_ON                           00003FFF
+_WRT_ENABLE_OFF                   00003DFF
+_WRT_ENABLE_ON                    00003FFF
+_WRT_OFF                          00003DFF
+_WRT_ON                           00003FFF
+_XT_OSC                           00003FFD
+__16F876                          00000001
+ack                               00000306
+banner                            00000013
+bcd2                              00000270
+date                              000000C4
+digit1                            00000280
+digit2                            00000289
+dow                               000000AF
+hour                              000000DC
+lessnine                          0000027F
+lessnine2                         00000288
+minute                            000000EB
+month                             0000009F
+nack                              00000319
+pclsub                            00000361
+read_RTC                          000002E4
+read_regs                         000001FE
+status_temp                       00000071
+w_temp                            00000070
+write_RTC                         0000032B
+year                              00000090
+
+
+MEMORY USAGE MAP ('X' = Used,  '-' = Unused)
+
+0000 : XX--XXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+0040 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+0080 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+00C0 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+0100 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+0140 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+0180 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+01C0 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+MPASM  5.51               PICMODEM876-628.ASM   2-10-2015  10:07:04         PAGE 42
+
+
+MEMORY USAGE MAP ('X' = Used,  '-' = Unused)
+
+
+0200 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+0240 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+0280 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+02C0 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+0300 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+0340 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXX----- ----------------
+2000 : -------X-------- ---------------- ---------------- ----------------
+
+All other memory blocks unused.
+
+Program Memory Words Used:   873
+Program Memory Words Free:  7319
+
+
+Errors   :     0
+Warnings :     0 reported,     0 suppressed
+Messages :     2 reported,    28 suppressed
+
+

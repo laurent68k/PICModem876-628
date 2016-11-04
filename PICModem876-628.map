@@ -1,0 +1,172 @@
+MPLINK 4.49, Linker
+Linker Map File - Created Tue Feb 10 10:07:05 2015
+
+                                 Section Info
+                  Section       Type    Address   Location Size(Bytes)
+                ---------  ---------  ---------  ---------  ---------
+                   .org_0       code   0x000000    program   0x000000
+                   .org_1       code   0x000000    program   0x000004
+                   .org_2       code   0x000004    program   0x0006ce
+.config_2007_PICMODEM876-628.O       code   0x002007    program   0x000002
+
+
+
+                              Program Memory Usage 
+                               Start         End      
+                           ---------   ---------      
+                            0x000000    0x000001      
+                            0x000004    0x00036a      
+                            0x002007    0x002007      
+            874 out of 8454 program addresses used, program memory utilization is 10%
+
+
+
+                              Symbols - Sorted by Name
+                     Name    Address   Location    Storage File                     
+                ---------  ---------  ---------  --------- ---------                
+             ATCMGLfailed   0x00018b    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+             ATCMGSfailed   0x0001b3    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     ATE0   0x0001bf    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                ATEfailed   0x0001c9    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     ATOK   0x00013d    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+               ATRDfailed   0x0001e8    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                ATVfailed   0x0001d9    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  ATWREnd   0x0001f5    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+               ATWRfailed   0x0001f7    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                    AnEnd   0x00015e    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                    AnErr   0x00013a    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   AnExit   0x00016b    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     AnOk   0x00015c    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  Analyse   0x00012b    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  CMGLRes   0x000036    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  CMGSRes   0x000027    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+               CheckIfATE   0x0001b5    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              CheckIfATRD   0x0001db    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+               CheckIfATV   0x0001cb    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              CheckIfATWR   0x0001ea    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              CheckIfCMGL   0x00016e    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              CheckIfCMGS   0x00018d    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                 CleanBuf   0x000160    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                EndRSRecv   0x00025d    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              ExecRDClock   0x0001f9    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              ExecWRClock   0x00021f    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  GoWrite   0x000365    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+            I2C_read_loop   0x0002f4    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+               I2C_w_loop   0x000339    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                I2C_write   0x00032c    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                 ISITATE1   0x0001c2    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                InitPortB   0x00023e    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   IntEnd   0x00000e    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     Main   0x00010f    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     Next   0x000117    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   RSEcho   0x00023b    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  RSPrint   0x000364    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                RSReadBCD   0x000265    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   RSRecv   0x000256    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   RSSend   0x00025f    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  RSSetup   0x000245    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+               RSWaitRecv   0x000250    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+               RSWriteBCD   0x000277    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              RTC_brst_rd   0x00028b    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              RTC_brst_wr   0x0002c0    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              SMSTextLoop   0x0001a8    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                    Start   0x000000    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  Startup   0x0000fc    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                    Store   0x00011f    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  TXError   0x00007f    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     TXOk   0x000089    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                      ack   0x000306    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   banner   0x000013    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     bcd2   0x000270    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     date   0x0000c4    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   digit1   0x000280    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   digit2   0x000289    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                      dow   0x0000af    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     hour   0x0000dc    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                 lessnine   0x00027f    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                lessnine2   0x000288    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   minute   0x0000eb    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                    month   0x00009f    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     nack   0x000319    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   pclsub   0x000361    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                 read_RTC   0x0002e4    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                read_regs   0x0001fe    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                write_RTC   0x00032b    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     year   0x000090    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+
+
+
+                              Symbols - Sorted by Address
+                     Name    Address   Location    Storage File                     
+                ---------  ---------  ---------  --------- ---------                
+                    Start   0x000000    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   IntEnd   0x00000e    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   banner   0x000013    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  CMGSRes   0x000027    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  CMGLRes   0x000036    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  TXError   0x00007f    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     TXOk   0x000089    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     year   0x000090    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                    month   0x00009f    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                      dow   0x0000af    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     date   0x0000c4    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     hour   0x0000dc    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   minute   0x0000eb    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  Startup   0x0000fc    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     Main   0x00010f    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     Next   0x000117    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                    Store   0x00011f    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  Analyse   0x00012b    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                    AnErr   0x00013a    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     ATOK   0x00013d    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     AnOk   0x00015c    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                    AnEnd   0x00015e    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                 CleanBuf   0x000160    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   AnExit   0x00016b    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              CheckIfCMGL   0x00016e    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+             ATCMGLfailed   0x00018b    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              CheckIfCMGS   0x00018d    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              SMSTextLoop   0x0001a8    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+             ATCMGSfailed   0x0001b3    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+               CheckIfATE   0x0001b5    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     ATE0   0x0001bf    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                 ISITATE1   0x0001c2    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                ATEfailed   0x0001c9    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+               CheckIfATV   0x0001cb    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                ATVfailed   0x0001d9    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              CheckIfATRD   0x0001db    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+               ATRDfailed   0x0001e8    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              CheckIfATWR   0x0001ea    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  ATWREnd   0x0001f5    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+               ATWRfailed   0x0001f7    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              ExecRDClock   0x0001f9    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                read_regs   0x0001fe    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              ExecWRClock   0x00021f    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   RSEcho   0x00023b    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                InitPortB   0x00023e    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  RSSetup   0x000245    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+               RSWaitRecv   0x000250    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   RSRecv   0x000256    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                EndRSRecv   0x00025d    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   RSSend   0x00025f    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                RSReadBCD   0x000265    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     bcd2   0x000270    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+               RSWriteBCD   0x000277    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                 lessnine   0x00027f    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   digit1   0x000280    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                lessnine2   0x000288    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   digit2   0x000289    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              RTC_brst_rd   0x00028b    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+              RTC_brst_wr   0x0002c0    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                 read_RTC   0x0002e4    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+            I2C_read_loop   0x0002f4    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                      ack   0x000306    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                     nack   0x000319    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                write_RTC   0x00032b    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                I2C_write   0x00032c    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+               I2C_w_loop   0x000339    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                   pclsub   0x000361    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  RSPrint   0x000364    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+                  GoWrite   0x000365    program     static C:\USERS\LFAVARD\DOCUMENTS\PERSO\PIC\PICMODEM876-628\PICMODEM876-628.ASM
+
+
